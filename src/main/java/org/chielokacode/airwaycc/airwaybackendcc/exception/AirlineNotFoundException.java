@@ -1,0 +1,11 @@
+package org.chielokacode.airwaycc.airwaybackendcc.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
+
+@ResponseStatus(code = HttpStatus.NOT_FOUND)
+public class AirlineNotFoundException extends Exception{
+    public AirlineNotFoundException(String message) {
+        super(message);
+    }
+}
