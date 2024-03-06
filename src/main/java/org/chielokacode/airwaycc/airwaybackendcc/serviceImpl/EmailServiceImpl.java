@@ -50,7 +50,7 @@ public class EmailServiceImpl {
 
     }
     public String passwordResetTokenMail(User user, String applicationUrl, String token) {
-        String url = applicationUrl + "/api/v1/user/savePassword?token=" + token;
+        String url = applicationUrl + "/api/v1/user/savePassword?token=" + token; //not used
         this.sendSimpleEmail(
                 user.getEmail(),
                 "Enter code into box on your app to reset your Password: " + token + ". Code will Expire in 10 minutes.",

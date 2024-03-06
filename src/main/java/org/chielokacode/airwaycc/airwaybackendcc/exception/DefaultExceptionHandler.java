@@ -28,6 +28,12 @@ public class DefaultExceptionHandler {
     }
 
 /////////////BAD REQUEST
+    @ExceptionHandler(InvalidNumberOfSeatException.class)
+    public ResponseEntity<ApiError> handleInvalidNumberOfSeatException(
+            InvalidNumberOfSeatException e, HttpServletRequest request) {
+        return buildErrorResponse(request, HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ApiError> handleUploadProfileImageException(
             UserNotFoundException e, HttpServletRequest request) {

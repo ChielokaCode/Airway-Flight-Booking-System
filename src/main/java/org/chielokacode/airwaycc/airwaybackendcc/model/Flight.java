@@ -21,7 +21,6 @@ public class Flight {
     private FlightDirection flightDirection;
     @Column(unique = true)
     private String flightNo;
-    private String airlineName;
     @ManyToOne
     private Airline airline;
     private LocalDate arrivalDate;
@@ -29,12 +28,10 @@ public class Flight {
     private long duration;
     private LocalTime arrivalTime;
     private LocalTime departureTime;
-    private String arrivalPortName;
     @ManyToOne
     private User user;
     @ManyToOne
     private Airport arrivalPort;
-    private String departurePortName;
 
     @ManyToOne
     private Airport departurePort;

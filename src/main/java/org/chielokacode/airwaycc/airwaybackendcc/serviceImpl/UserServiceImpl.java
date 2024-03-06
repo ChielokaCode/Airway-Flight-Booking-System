@@ -226,34 +226,6 @@ public class UserServiceImpl implements UserDetailsService, UserService {
         return "Old Password and New Password can't be the same";
     }
 
-    public String generateRandomNumber(int length) {
-        if (length <= 0) {
-            throw new IllegalArgumentException("Length must be greater than 0");
-        }
-
-        Random random = new Random();
-        StringBuilder stringBuilder = new StringBuilder(length);
-
-        for (int i = 0; i < length; i++) {
-            int digit = random.nextInt(10); // Generates a random digit between 0 and 9
-            stringBuilder.append(digit);
-        }
-
-        return stringBuilder.toString();
-    }
-
-    public String generateRandomLetters(int length) {
-        Random random = new Random();
-        StringBuilder sb = new StringBuilder(length);
-        for (int i = 0; i < length; i++) {
-            char randomChar = (char) ('A' + random.nextInt(26)); // Generating random letters from A to Z
-            sb.append(randomChar);
-        }
-        return sb.toString();
-    }
-
-
-
 }
 
 

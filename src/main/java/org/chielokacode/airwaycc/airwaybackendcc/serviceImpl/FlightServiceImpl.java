@@ -16,6 +16,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -35,9 +36,11 @@ public class FlightServiceImpl implements FlightService {
     private final ClassesRepository classesRepository;
     private final AirportRepository airportRepository;
     private final SeatRepository seatRepository;
+    private final SeatListRepository seatListRepository;
+
 
     @Autowired
-    public FlightServiceImpl(FlightRepository flightRepository, UserRepository userRepository, AirlineRepository airlineRepository, UserServiceImpl userService, ClassesRepository classesRepository, AirportRepository airportRepository, SeatRepository seatRepository) {
+    public FlightServiceImpl(FlightRepository flightRepository, UserRepository userRepository, AirlineRepository airlineRepository, UserServiceImpl userService, ClassesRepository classesRepository, AirportRepository airportRepository, SeatRepository seatRepository, SeatListRepository seatListRepository) {
         this.flightRepository = flightRepository;
         this.userRepository = userRepository;
         this.airlineRepository = airlineRepository;
@@ -45,6 +48,7 @@ public class FlightServiceImpl implements FlightService {
         this.classesRepository = classesRepository;
         this.airportRepository = airportRepository;
         this.seatRepository = seatRepository;
+        this.seatListRepository = seatListRepository;
     }
 
     @Override
@@ -89,95 +93,135 @@ public class FlightServiceImpl implements FlightService {
     }
 
     @Override
-    public String addNewFlight(AddFlightDto flightDto) throws AirportNotFoundException, AirlineNotFoundException {
+    public String addNewFlight(AddFlightDto flightDto) throws AirportNotFoundException, AirlineNotFoundException, InvalidNumberOfSeatException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
         User user = userRepository.findUserByEmail(username);
-
         if (user == null) {
-            throw new UserNotFoundException("Admin must be Logged In to Continue");
+            throw new UsernameNotFoundException("Admin must be Logged In to Continue");
         }
         if (!user.getUserRole().equals(Role.ADMIN)) {
             throw new UserNotVerifiedException("You are not allowed to Add New Flight");
         }
-
         Flight newFlight = new Flight();
         newFlight.setFlightDirection(flightDto.getFlightDirection());
 
-            String newFlightNoLetter = userService.generateRandomLetters(2);
-            String newFlightNo = userService.generateRandomNumber(3);
-            String generatedFlightNo = newFlightNoLetter + newFlightNo;
-            newFlight.setFlightNo(generatedFlightNo);
-            newFlight.setUser(user);
-            newFlight.setAirlineName(flightDto.getAirlineName());
-            newFlight.setAirline(airlineRepository.findByNameIgnoreCase(flightDto.getAirlineName()).orElseThrow(() -> new AirlineNotFoundException("Airline with name not Found")));
-            newFlight.setDuration(flightDto.getDuration());
-            newFlight.setDepartureDate(flightDto.getDepartureDate());
-            LocalDate arrivalDate = calculateArrivalDate(flightDto.getDepartureDate(), flightDto.getDuration());
-            newFlight.setArrivalDate(arrivalDate);
-            newFlight.setDepartureTime(flightDto.getDepartureTime());
-            newFlight.setArrivalPortName(flightDto.getArrivalPortName());
-            newFlight.setDeparturePortName(flightDto.getDeparturePortName());
+        String newFlightNoLetter = generateRandomLetters(2);
+        String newFlightNo = generateRandomNumber(3);
+        String generatedFlightNo = newFlightNoLetter + newFlightNo;
+        newFlight.setFlightNo(generatedFlightNo);
+        newFlight.setUser(user);
+        Airline airline = airlineRepository.findByNameIgnoreCase(flightDto.getAirlineName()).orElseThrow(() -> new AirlineNotFoundException("Airline the given name not found"));
+        newFlight.setAirline(airline);
+        newFlight.setDuration(flightDto.getDuration());
+        newFlight.setDepartureDate(flightDto.getDepartureDate());
+        newFlight.setDepartureTime(flightDto.getDepartureTime());
 
-            newFlight.setArrivalPort(airportRepository.findByIataCodeIgnoreCase(flightDto.getArrivalPortName()).orElseThrow(() -> new AirportNotFoundException("Airport with code not Found")));
-            newFlight.setDeparturePort(airportRepository.findByIataCodeIgnoreCase(flightDto.getDeparturePortName()).orElseThrow(() -> new AirportNotFoundException("Airport with code not Found")));
+        LocalDateTime arrivalDateTime = calculateArrivalDateTime(flightDto.getDepartureDate(), flightDto.getDepartureTime(), flightDto.getDuration());
+        newFlight.setArrivalDate(arrivalDateTime.toLocalDate());
+        newFlight.setArrivalTime(arrivalDateTime.toLocalTime());
 
-            newFlight.setTotalSeat(flightDto.getTotalSeat());
-            newFlight.setNoOfAdult(flightDto.getNoOfAdult());
-            newFlight.setNoOfChildren(flightDto.getNoOfChildren());
-            newFlight.setNoOfInfant(flightDto.getNoOfInfant());
-            LocalTime arrivalTime = flightDto.getDepartureTime().plusMinutes(flightDto.getDuration());
-            newFlight.setArrivalTime(arrivalTime);
+        Airport arrivalPort = airportRepository.findByIataCodeIgnoreCase(flightDto.getArrivalPortName()).orElseThrow(() -> new AirportNotFoundException("Airport with given name not Found"));
+        Airport departurePort = airportRepository.findByIataCodeIgnoreCase(flightDto.getDeparturePortName()).orElseThrow(() -> new AirportNotFoundException("Airport with given name not Found"));
+        newFlight.setArrivalPort(arrivalPort);
+        newFlight.setDeparturePort(departurePort);
+        newFlight.setNoOfAdult(flightDto.getNoOfAdult());
+        newFlight.setNoOfChildren(flightDto.getNoOfChildren());
+        newFlight.setNoOfInfant(flightDto.getNoOfInfant());
 
         if (flightDto.getFlightDirection() == FlightDirection.ROUND_TRIP) {
             newFlight.setReturnDate(flightDto.getReturnDate());
             newFlight.setReturnTime(flightDto.getReturnTime());
-
         }
-
         Flight saveFlight = flightRepository.save(newFlight);
-            List<Classes> classesList = flightDto.getClasses();
-            if (classesList != null) {
-                for (Classes classes : classesList) {
-                    Classes saveClasses = new Classes();
-                    saveClasses.setId(classes.getId());
-                    saveClasses.setClassName(classes.getClassName());
-                    saveClasses.setBasePrice(classes.getBasePrice());
-                    saveClasses.setBaggageAllowance(classes.getBaggageAllowance());
-                    saveClasses.setFlightStatus(classes.getFlightStatus());
-                    saveClasses.setTaxFee(classes.getTaxFee());
-                    saveClasses.setSurchargeFee(classes.getSurchargeFee());
-                    saveClasses.setServiceCharge(classes.getServiceCharge());
-                    saveClasses.setTotalPrice(classes.getBasePrice() + classes.getTaxFee() + classes.getSurchargeFee() + classes.getServiceCharge());
-                    saveClasses.setNumOfSeats(classes.getNumOfSeats());
-                    saveClasses.setFlight(saveFlight);
-                    Classes savedClasses = classesRepository.save(saveClasses);
-                    classes.getSeat().setClassName(savedClasses);
-                    classes.getSeat().setFlightName(saveFlight);
-                    Seat seat = seatRepository.save(classes.getSeat());
-                    saveClasses.setSeat(seat);
-                }
-            }
 
+        List<Classes> classesList = flightDto.getClasses();
+        if (classesList != null) {
+            for (Classes classes : classesList) {
+                Classes saveClasses = new Classes();
+                saveClasses.setClassName(classes.getClassName());
+                saveClasses.setBasePrice(classes.getBasePrice());
+                saveClasses.setBaggageAllowance(classes.getBaggageAllowance());
+                saveClasses.setFlightStatus(classes.getFlightStatus());
+                saveClasses.setTaxFee(classes.getTaxFee());
+                saveClasses.setSurchargeFee(classes.getSurchargeFee());
+                saveClasses.setServiceCharge(classes.getServiceCharge());
+                saveClasses.setTotalPrice(classes.getBasePrice() + classes.getTaxFee() + classes.getSurchargeFee() + classes.getServiceCharge());
+                saveClasses.setNumOfSeats(classes.getNumOfSeats());
+                saveClasses.setFlight(saveFlight);
+                Classes savedClasses = classesRepository.save(saveClasses);
+                classes.getSeat().setClassName(savedClasses);
+                classes.getSeat().setFlightName(saveFlight);
+                classes.getSeat().setNumberOfSeat(classes.getSeat().getNumberOfSeat());
+                Seat seat = seatRepository.save(classes.getSeat());
+
+                classes.getSeat().setSeatList(generateList(seat));
+
+                saveClasses.setSeat(seat);
+                seatRepository.save(seat);
+                classesRepository.save(saveClasses);
+            }
+        }
         return "Flight Added Successfully";
     }
 
-    public LocalDate calculateArrivalDate(LocalDate departureDate, long durationMinutes) {
-        long days = durationMinutes / (24 * 60);
-        long remainingMinutes = durationMinutes % (24 * 60);
-        LocalDate arrivalDate = departureDate.plusDays(days);
-        if (remainingMinutes > 0) {
-            LocalTime departureTime = LocalTime.of(0, 0);
-            LocalDateTime departureDateTime = LocalDateTime.of(departureDate, departureTime);
-            LocalDateTime arrivalDateTime = departureDateTime.plusMinutes(remainingMinutes);
-            arrivalDate = arrivalDateTime.toLocalDate();
+    public List<SeatList> generateList(Seat seat) {
+        List<SeatList> resultList = new ArrayList<>();
+        for (int i = 1; i <= seat.getNumberOfSeat(); i++) {
+            SeatList seatList = new SeatList();
+            seatList.setSeatLabel(seat.getSeatCode() + i);
+            seatList.setOccupied(false);
+            seatList.setSeat(seat);
+            resultList.add(seatList);
         }
-        return arrivalDate;
+        return seatListRepository.saveAll(resultList);
     }
 
 
+    public LocalDateTime calculateArrivalDateTime(LocalDate departureDate, LocalTime departureTime, long durationMinutes) {
+        LocalDateTime departureDateTime = LocalDateTime.of(departureDate, departureTime);
+
+        long days = durationMinutes / (24 * 60);
+        long remainingMinutes = durationMinutes % (24 * 60);
+
+        LocalDateTime arrivalDateTime = departureDateTime.plusDays(days);
+
+        if (remainingMinutes > 0) {
+            arrivalDateTime = arrivalDateTime.plusMinutes(remainingMinutes);
+        }
+
+        return arrivalDateTime;
+    }
+
+
+    public String generateRandomNumber(int length) {
+        if (length <= 0) {
+            throw new IllegalArgumentException("Length must be greater than 0");
+        }
+
+        Random random = new Random();
+        StringBuilder stringBuilder = new StringBuilder(length);
+
+        for (int i = 0; i < length; i++) {
+            int digit = random.nextInt(10);
+            stringBuilder.append(digit);
+        }
+
+        return stringBuilder.toString();
+    }
+
+    public String generateRandomLetters(int length) {
+        Random random = new Random();
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            char randomChar = (char) ('A' + random.nextInt(26));
+            sb.append(randomChar);
+        }
+        return sb.toString();
+    }
+
     @Override
-    public String updateFlight(@PathVariable Long id, @RequestBody AddFlightDto flightDto) throws FlightNotFoundException {
+    public String updateFlight(@PathVariable Long id, @RequestBody AddFlightDto flightDto) throws FlightNotFoundException, AirportNotFoundException, AirlineNotFoundException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
         User user = userRepository.findUserByEmail(username);
@@ -201,15 +245,20 @@ public class FlightServiceImpl implements FlightService {
                 flight.setReturnDate(flightDto.getReturnDate());
                 flight.setReturnTime(flightDto.getReturnTime());
             }
+            if (flightDto.getFlightDirection() == FlightDirection.ONE_WAY) {
+                flight.setReturnDate(null);
+                flight.setReturnTime(null);
+            }
         }
         if (flightDto.getFlightNo() != null) {
-            String newFlightNoLetter = userService.generateRandomLetters(2);
-            String newFlightNo = userService.generateRandomNumber(3);
+            String newFlightNoLetter = generateRandomLetters(2);
+            String newFlightNo = generateRandomNumber(3);
             String generatedFlightNo = newFlightNoLetter + newFlightNo;
             flight.setFlightNo(generatedFlightNo);
         }
         if (flightDto.getAirlineName() != null) {
-            flight.setAirlineName(flightDto.getAirlineName());
+            Airline airline = airlineRepository.findByNameIgnoreCase(flightDto.getAirlineName()).orElseThrow(() -> new AirlineNotFoundException("Airline with name not found"));
+            flight.setAirline(airline);
         }
         if (flightDto.getDuration() != null) {
             flight.setDuration(flightDto.getDuration());
@@ -220,13 +269,11 @@ public class FlightServiceImpl implements FlightService {
         if (flightDto.getDepartureTime() != null) {
             flight.setDepartureTime(flightDto.getDepartureTime());
         }
-        if (flightDto.getArrivalDate() != null && flightDto.getDuration() != null && flightDto.getDepartureDate() != null) {
-            LocalDate arrivalDate = calculateArrivalDate(flightDto.getDepartureDate(), flightDto.getDuration());
-            flight.setArrivalDate(arrivalDate);
-        }
-        if (flightDto.getArrivalTime() != null && flightDto.getDepartureTime() != null && flightDto.getDuration() != null) {
-            LocalTime arrivalTime = flightDto.getDepartureTime().plusMinutes(flightDto.getDuration());
-            flight.setArrivalTime(arrivalTime);
+        if (flightDto.getDepartureDate() != null && flightDto.getDepartureTime() != null && flightDto.getDuration() != null) {
+            LocalDateTime arrivalDateTime = calculateArrivalDateTime(flightDto.getDepartureDate(), flightDto.getDepartureTime(), flightDto.getDuration());
+
+            flight.setArrivalDate(arrivalDateTime.toLocalDate());
+            flight.setArrivalTime(arrivalDateTime.toLocalTime());
         }
         if (flightDto.getTotalSeat() != null) {
             flight.setTotalSeat(flightDto.getTotalSeat());
@@ -242,65 +289,42 @@ public class FlightServiceImpl implements FlightService {
         }
 
         if (flightDto.getArrivalPortName() != null) {
-            flight.setArrivalPortName(flightDto.getArrivalPortName());
+            Airport arrivalPort = airportRepository.findByIataCodeIgnoreCase(flightDto.getArrivalPortName()).orElseThrow(() -> new AirportNotFoundException("Airport with code not Found"));
+            flight.setArrivalPort(arrivalPort);
         }
         if (flightDto.getDeparturePortName() != null) {
-            flight.setDeparturePortName(flightDto.getDeparturePortName());
+            Airport departurePort = airportRepository.findByIataCodeIgnoreCase(flightDto.getDeparturePortName()).orElseThrow(() -> new AirportNotFoundException("Airport with code not Found"));
+            flight.setDeparturePort(departurePort);
         }
 
         Flight saveFlight = flightRepository.save(flight);
 
-        List<Classes> classesList = flightDto.getClasses();
-        if (classesList != null && !classesList.isEmpty()) {
-            List<Classes> existingClassesList = saveFlight.getClasses(); // Fetch all existing classes associated with the flight
-            for (Classes classes : classesList) {
-                for (Classes existingClasses : existingClassesList) {
-//                    if (existingClasses.getId().equals(classes.getId())) { // Match classes by ID
-                        // Update class properties
-                        if (existingClasses.getClassName() != null) {
-                            existingClasses.setClassName(classes.getClassName());
-                        }
-                        if (existingClasses.getBasePrice() != null) {
-                            existingClasses.setBasePrice(classes.getBasePrice());
-                        }
-                        if (existingClasses.getBaggageAllowance() != null) {
-                            existingClasses.setBaggageAllowance(classes.getBaggageAllowance());
-                        }
-                        if (existingClasses.getFlightStatus() != null) {
-                            existingClasses.setFlightStatus(classes.getFlightStatus());
-                        }
-                        if (existingClasses.getTaxFee() != null) {
-                            existingClasses.setTaxFee(classes.getTaxFee());
-                        }
-                        if (existingClasses.getSurchargeFee() != null) {
-                            existingClasses.setSurchargeFee(classes.getSurchargeFee());
-                        }
-                        if (existingClasses.getServiceCharge() != null) {
-                            existingClasses.setServiceCharge(classes.getServiceCharge());
-                        }
-                        if (existingClasses.getNumOfSeats() != null) {
-                            existingClasses.setNumOfSeats(classes.getNumOfSeats());
-                        }
+        List<Classes> existingClassesList = flight.getClasses();
+        List<Classes> updatedClassesList = flightDto.getClasses();
+        if (!(updatedClassesList.isEmpty()) && !(existingClassesList.isEmpty())) {
+            for (int i = 0; i < existingClassesList.size(); i++) {
+                existingClassesList.get(i).setClassName(updatedClassesList.get(i).getClassName());
+                existingClassesList.get(i).setBasePrice(updatedClassesList.get(i).getBasePrice());
+                existingClassesList.get(i).setBaggageAllowance(updatedClassesList.get(i).getBaggageAllowance());
+                existingClassesList.get(i).setFlightStatus(updatedClassesList.get(i).getFlightStatus());
+                existingClassesList.get(i).setTaxFee(updatedClassesList.get(i).getTaxFee());
+                existingClassesList.get(i).setSurchargeFee(updatedClassesList.get(i).getSurchargeFee());
+                existingClassesList.get(i).setServiceCharge(updatedClassesList.get(i).getServiceCharge());
+                existingClassesList.get(i).setTotalPrice(updatedClassesList.get(i).getBasePrice() + updatedClassesList.get(i).getTaxFee() + updatedClassesList.get(i).getSurchargeFee() + updatedClassesList.get(i).getServiceCharge());
+                existingClassesList.get(i).setNumOfSeats(updatedClassesList.get(i).getNumOfSeats());
+                existingClassesList.get(i).setFlight(saveFlight);
+                Classes savedClasses = classesRepository.save(existingClassesList.get(i));
+                existingClassesList.get(i).getSeat().setClassName(savedClasses);
+                existingClassesList.get(i).getSeat().setFlightName(saveFlight);
+                existingClassesList.get(i).getSeat().setSeatCode(updatedClassesList.get(i).getSeat().getSeatCode());
+                existingClassesList.get(i).getSeat().setNumberOfSeat(updatedClassesList.get(i).getSeat().getNumberOfSeat());
+                Seat seat = seatRepository.save(existingClassesList.get(i).getSeat());
+                existingClassesList.get(i).setSeat(seat);
+                classesRepository.save(savedClasses);
 
-                        // Calculate total price
-                        Double totalPrice = existingClasses.getBasePrice() + existingClasses.getTaxFee() +
-                                existingClasses.getSurchargeFee() + existingClasses.getServiceCharge();
-                        existingClasses.setTotalPrice(totalPrice);
-
-                        // Save the updated classes
-                        Classes savedClasses = classesRepository.save(existingClasses);
-
-                        // Update seat information
-                        Seat seat = savedClasses.getSeat();
-                        if (seat != null) {
-                            seat.setClassName(savedClasses);
-                            seat.setFlightName(saveFlight);
-                            seatRepository.save(seat);
-                        }
-                }
             }
-        }
 
+        }
         return "Flight Updated Successfully";
     }
 

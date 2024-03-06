@@ -6,6 +6,7 @@ import org.chielokacode.airwaycc.airwaybackendcc.dto.FlightSearchDto;
 import org.chielokacode.airwaycc.airwaybackendcc.exception.AirlineNotFoundException;
 import org.chielokacode.airwaycc.airwaybackendcc.exception.AirportNotFoundException;
 import org.chielokacode.airwaycc.airwaybackendcc.exception.FlightNotFoundException;
+import org.chielokacode.airwaycc.airwaybackendcc.exception.InvalidNumberOfSeatException;
 import org.chielokacode.airwaycc.airwaybackendcc.model.Airport;
 import org.chielokacode.airwaycc.airwaybackendcc.model.Flight;
 import org.chielokacode.airwaycc.airwaybackendcc.serviceImpl.FlightServiceImpl;
@@ -21,6 +22,7 @@ import java.util.List;
 
 
 @RestController
+@CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true")
 @RequestMapping("/api/v1/flight")
 public class FlightController {
 
@@ -32,7 +34,7 @@ public class FlightController {
     }
 
     @PostMapping("/add-flight")
-    private ResponseEntity<String> addFlight(@RequestBody AddFlightDto flightDto) throws AirportNotFoundException, AirlineNotFoundException {
+    private ResponseEntity<String> addFlight(@RequestBody AddFlightDto flightDto) throws AirportNotFoundException, AirlineNotFoundException, InvalidNumberOfSeatException {
         String response = flightService.addNewFlight(flightDto);
         return new ResponseEntity<>(response, HttpStatus.OK);
     }

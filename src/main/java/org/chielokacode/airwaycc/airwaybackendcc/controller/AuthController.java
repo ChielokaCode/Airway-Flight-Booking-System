@@ -11,6 +11,7 @@ import org.chielokacode.airwaycc.airwaybackendcc.exception.UserNotVerifiedExcept
 import org.chielokacode.airwaycc.airwaybackendcc.model.User;
 import org.chielokacode.airwaycc.airwaybackendcc.model.VerificationToken;
 import org.chielokacode.airwaycc.airwaybackendcc.serviceImpl.EmailServiceImpl;
+import org.chielokacode.airwaycc.airwaybackendcc.serviceImpl.FlightServiceImpl;
 import org.chielokacode.airwaycc.airwaybackendcc.serviceImpl.UserServiceImpl;
 import org.chielokacode.airwaycc.airwaybackendcc.utils.GoogleJwtUtils;
 import org.chielokacode.airwaycc.airwaybackendcc.utils.JwtUtils;
@@ -28,6 +29,8 @@ import java.util.Optional;
 @RequestMapping("/api/v1/user")
 public class AuthController {
     private final UserServiceImpl userService;
+    private final FlightServiceImpl flightService;
+
     private final ApplicationEventPublisher publisher;
     private JwtUtils jwtUtils;
     private final GoogleJwtUtils googleJwtUtils;
@@ -35,8 +38,9 @@ public class AuthController {
  private final EmailServiceImpl emailService;
 
     @Autowired
-    public AuthController(ApplicationEventPublisher publisher, UserServiceImpl userService, JwtUtils jwtUtils, GoogleJwtUtils googleJwtUtils, EmailServiceImpl emailService) {
+    public AuthController(ApplicationEventPublisher publisher, UserServiceImpl userService, FlightServiceImpl flightService, JwtUtils jwtUtils, GoogleJwtUtils googleJwtUtils, EmailServiceImpl emailService) {
         this.publisher = publisher;
+        this.flightService = flightService;
         this.jwtUtils = jwtUtils;
         this.googleJwtUtils = googleJwtUtils;
         this.emailService = emailService;
@@ -111,7 +115,7 @@ public class AuthController {
         User user = userService.findUserByEmail(passwordDto.getEmail());
         String url = "";
         if(user != null){
-            String token =  userService.generateRandomNumber(6);
+            String token =  flightService.generateRandomNumber(6);
             userService.createPasswordResetTokenForUser(user, token);
             try {
                 url = emailService.passwordResetTokenMail(user, emailService.applicationUrl(request), token);
